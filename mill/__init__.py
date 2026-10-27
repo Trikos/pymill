@@ -668,6 +668,24 @@ class Mill:
         }
         await self.request(f"devices/{device_id}/settings", payload, patch=True)
 
+    async def set_limited_heating_power(self, device_id: str, percent: int) -> None:
+        """Limit the heating power to a percentage of the rated power (max_heater_power)."""
+        percent = min(max(int(percent), 1), 100)
+        payload = {
+            "deviceType": self.devices[device_id].device_type,
+            "enabled": True,
+            "settings": {
+                "operation_mode": MODE_INDIVIDUAL,
+                "limited_heating_power": percent,
+            },
+        }
+
+        if await self.request(f"devices/{device_id}/settings", payload, patch=True):
+            self._cache.clear()
+            device = self.devices[device_id]
+            if isinstance(device, Heater):
+                device.limited_heating_power = percent
+
     async def set_heater_temp(self, device_id: str, set_temp: float) -> None:
         """Set heater target temperature."""
         payload = {
@@ -844,6 +862,8 @@ class Heater(MillDevice):
     year_consumption: float | None = None
     floor_temperature: float | None = None
     regulator_type: str | None = None
+    max_heater_power: float | None = None
+    limited_heating_power: int | None = None
     predictive_heating: bool | None = None
     commercial_lock: bool | None = None
     night_saving: bool | None = None
@@ -868,6 +888,8 @@ class Heater(MillDevice):
         device_settings_reported = device_settings.get("reported", {})
         device_settings_desired = device_settings.get("desired", {})
         self.regulator_type = device_settings_reported.get("regulator_type")
+        self.max_heater_power = device_settings_reported.get("max_heater_power")
+        self.limited_heating_power = device_settings_reported.get("limited_heating_power")
         predictive_mode = device_settings_reported.get("predictive_heating_type")
         self.predictive_heating = None if predictive_mode is None else predictive_mode == "advanced"
         night_saving_mode = device_settings_reported.get("night_saving_mode_active")
